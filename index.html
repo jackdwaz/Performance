@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Sales Matrix Dashboard</title>
+<title>Advanced Sales Matrix Dashboard</title>
 
 <style>
 body{
@@ -22,7 +22,7 @@ h2{margin-bottom:20px;}
 }
 
 select{
-    padding:8px;
+    padding:6px;
     margin:5px;
     border-radius:6px;
     border:1px solid #ccc;
@@ -48,20 +48,34 @@ th{
 
 .growth-pos{color:green;font-weight:bold;}
 .growth-neg{color:red;font-weight:bold;}
+
+.note{
+    font-size:12px;
+    color:#555;
+    margin-top:5px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Sales Matrix Dashboard</h2>
+<h2>📊 Advanced Sales Matrix Dashboard</h2>
 
 <div class="filters">
 <select id="store"><option value="">All Stores</option></select>
 <select id="location"><option value="">All Locations</option></select>
 <select id="year"><option value="">All Years</option></select>
-<select id="month"><option value="">All Months</option></select>
+
+<select id="month" multiple size="4"></select>
+
 <select id="product"><option value="">All Products</option></select>
 <select id="category"><option value="">All Categories</option></select>
+
+<label>
+<input type="checkbox" id="quarterToggle"> Show Quarter View
+</label>
+
+<div class="note">Hold Ctrl (or Cmd on Mac) to select multiple months</div>
 </div>
 
 <div id="output"></div>
@@ -73,6 +87,12 @@ const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?`;
 
 let rawData=[];
 const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const quarters={
+Q1:["Jan","Feb","Mar"],
+Q2:["Apr","May","Jun"],
+Q3:["Jul","Aug","Sep"],
+Q4:["Oct","Nov","Dec"]
+};
 
 fetch(URL)
 .then(res=>res.text())
@@ -98,7 +118,8 @@ function sum(arr){return arr.reduce((a,b)=>a+b.qty,0)}
 
 function populate(id,values,label){
 let sel=document.getElementById(id);
-sel.innerHTML=`<option value="">${label}</option>`;
+sel.innerHTML="";
+if(label) sel.innerHTML=`<option value="">${label}</option>`;
 values.sort().forEach(v=>{
 if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
 });
@@ -108,12 +129,12 @@ function initFilters(){
 populate("store",unique(rawData.map(d=>d.store)),"All Stores");
 populate("location",unique(rawData.map(d=>d.location)),"All Locations");
 populate("year",unique(rawData.map(d=>d.year)),"All Years");
-populate("month",unique(rawData.map(d=>d.month))
-.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)),"All Months");
 populate("product",unique(rawData.map(d=>d.product)),"All Products");
 populate("category",unique(rawData.map(d=>d.category)),"All Categories");
 
-document.querySelectorAll("select").forEach(s=>{
+populate("month",monthOrder);
+
+document.querySelectorAll("select,input").forEach(s=>{
 s.addEventListener("change",render);
 });
 
@@ -125,44 +146,62 @@ function render(){
 let fStore=store.value;
 let fLocation=location.value;
 let fYear=year.value;
-let fMonth=month.value;
 let fProduct=product.value;
 let fCategory=category.value;
+
+let selectedMonths=[...month.selectedOptions].map(o=>o.value);
 
 let data=rawData.filter(d=>{
 return (!fStore||d.store==fStore)
 &&(!fLocation||d.location==fLocation)
 &&(!fYear||d.year==fYear)
-&&(!fMonth||d.month==fMonth)
 &&(!fProduct||d.product==fProduct)
 &&(!fCategory||d.category==fCategory);
 });
 
-displayMatrix(data,fMonth);
+displayMatrix(data,selectedMonths);
 }
 
-function displayMatrix(data,selectedMonth){
+function displayMatrix(data,selectedMonths){
 
 let years=unique(data.map(d=>d.year)).sort();
-let html="<table><tr><th>Month</th>";
+
+let html="<table><tr><th>Period</th>";
 
 years.forEach(y=>{
-html+=`<th>${y}</th>`;
+let yearTotal=sum(data.filter(d=>d.year==y));
+html+=`<th>${y}<br><small>Total: ${yearTotal}</small></th>`;
 });
 
 html+="</tr>";
 
-let months = selectedMonth ? [selectedMonth] : monthOrder;
+let showQuarter=document.getElementById("quarterToggle").checked;
 
-months.forEach(m=>{
+let periods=[];
 
-let row="<tr><td><b>"+m+"</b></td>";
+if(showQuarter){
+periods=Object.keys(quarters);
+} else if(selectedMonths.length>0){
+periods=selectedMonths;
+} else {
+periods=monthOrder;
+}
 
+periods.forEach(p=>{
+
+let row=`<tr><td><b>${p}</b></td>`;
 let prevVal=null;
 
 years.forEach(y=>{
 
-let val=sum(data.filter(d=>d.year==y && d.month==m));
+let val=0;
+
+if(showQuarter){
+val=sum(data.filter(d=>d.year==y && quarters[p].includes(d.month)));
+} else {
+val=sum(data.filter(d=>d.year==y && d.month==p));
+}
+
 let growthHTML="";
 
 if(prevVal!==null && prevVal>0){
