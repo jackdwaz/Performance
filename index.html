@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sales Dashboard</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px;}
+  select { margin: 5px; padding: 5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px }
+  th, td { border: 1px solid #aaa; padding: 8px; text-align: center; }
+  th { background: #333; color: #fff; }
+  .positive { color: green; }
+  .negative { color: red; }
+</style>
+</head>
+<body>
+
+<h2>📊 Sales Dashboard</h2>
+
+<label>Store:
+<select id="filterStore"></select></label>
+
+<label>Year:
+<select id="filterYear"></select></label>
+
+<label>Month:
+<select id="filterMonth"></select></label>
+
+<label>Product Type:
+<select id="filterProd"></select></label>
+
+<label>Category:
+<select id="filterCat"></select></label>
+
+<div id="results"></div>
+
+<script>
+
+// — Google Sheet Info —
+const SHEET_ID = "151Stj3jdaqv-FG7CgOYGX87W8QEdDQJwzZNUY9t_aKE";
+const API_KEY = "YOUR_GOOGLE_SHEETS_API_KEY";
+
+// — Global storage —
+let allData = [];
+
+// — Load Sheet Data —
+fetch(
+  `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!A:F?key=${API_KEY}`
+)
+.then(r => r.json())
+.then(resp => {
+  allData = resp.values.slice(1).map(r => ({
+    store: r[0],
+    year: r[1],
+    month: r[2],
+    product: r[3],
+    category: r[4],
+    qty: +r[5]
+  }))
+  initFilters();
+})
+
+// — Month Order —
+const monthOrder = [
+  "Jan","Feb","Mar","Apr","May","Jun",
+  "Jul","Aug","Sep","Oct","Nov","Dec"
+];
+
+// — Initialize filters —
+function initFilters() {
+  populateDropdown("filterStore", unique(allData.map(d=>d.store)));
+  populateDropdown("filterYear", unique(allData.map(d=>d.year)));
+  populateDropdown("filterMonth", monthOrder);
+  populateDropdown("filterProd", unique(allData.map(d=>d.product)));
+  populateDropdown("filterCat", unique(allData.map(d=>d.category)));
+
+  attachListeners();
+  showResults();
+}
+
+function populateDropdown(id, arr) {
+  let sel = document.getElementById(id);
+  sel.innerHTML = "<option value=''>All</option>";
+  arr.sort().forEach(v => {
+    if(v) sel.innerHTML += `<option>${v}</option>`;
+  });
+}
+
+function attachListeners(){
+  [
+    "filterStore","filterYear",
+    "filterMonth","filterProd","filterCat"
+  ].forEach(id=>{
+    document.getElementById(id)
+      .addEventListener("change", showResults);
+  });
+}
+
+function unique(arr){
+  return [...new Set(arr.filter(v=>v && v != "0"))];
+}
+
+// — Filter & Display —
+function showResults(){
+
+  let fStore = document.getElementById("filterStore").value;
+  let fYear  = document.getElementById("filterYear").value;
+  let fMon   = document.getElementById("filterMonth").value;
+  let fProd  = document.getElementById("filterProd").value;
+  let fCat   = document.getElementById("filterCat").value;
+
+  let filtered = allData.filter(d=>{
+    return (!fStore || d.store === fStore)
+        && (!fYear  || d.year === fYear)
+        && (!fMon   || d.month === fMon)
+        && (!fProd  || d.product === fProd)
+        && (!fCat   || d.category === fCat)
+        && d.qty > 0;
+  });
+
+  // rebuild dependent dropdowns
+  refreshDependentFilters(filtered);
+
+  // group & display
+  displayTable(filtered);
+}
+
+function refreshDependentFilters(data){
+  updateFilter("filterYear", unique(data.map(d=>d.year)));
+  updateFilter("filterMonth", unique(data.map(d=>d.month)).sort((a,b)=>
+    monthOrder.indexOf(a) - monthOrder.indexOf(b)
+  ));
+  updateFilter("filterProd", unique(data.map(d=>d.product)));
+  updateFilter("filterCat", unique(data.map(d=>d.category)));
+}
+
+function updateFilter(id, arr){
+  let sel = document.getElementById(id);
+  let curr = sel.value;
+  populateDropdown(id, arr);
+  sel.value = curr;
+}
+
+// — Results —
+function displayTable(data){
+
+  let grouped = {};
+
+  data.forEach(d => {
+    if(!grouped[d.store]) grouped[d.store] = {};
+    if(!grouped[d.store][d.year]) grouped[d.store][d.year] = [];
+    grouped[d.store][d.year].push(d);
+  });
+
+  let html = "";
+
+  for(let store in grouped){
+    html += `<h3>${store}</h3>`;
+    for(let year in grouped[store]){
+
+      // YTD this year
+      let yearData = grouped[store][year];
+      let ytdThis = sumQ(yearData);
+
+      // Previous year
+      let prevYear = (+year -1)+"";
+      let prevYearData = grouped[store][prevYear] || [];
+      let ytdPrev = sumQ(prevYearData);
+
+      let ytdGrowth = percentChange(ytdPrev, ytdThis);
+
+      html += `
+      <table>
+        <tr>
+          <th colspan="5">${year}
+            YTD: ${ytdThis}
+            ${showPercent(ytdGrowth)}
+          </th>
+        </tr>
+        <tr>
+          <th>Month</th>
+          <th>Qty</th>
+          <th>MoM Growth</th>
+          <th>YTD</th>
+          <th>YTD Growth</th>
+        </tr>
+      `;
+
+      let months =
+        unique(yearData.map(d=>d.month))
+        .sort((a,b)=> monthOrder.indexOf(a)-monthOrder.indexOf(b));
+
+      let ytdRun = 0;
+      months.forEach(mon =>{
+        let thisQty = sumQ(yearData.filter(d=>d.month==mon));
+        let prevQty = sumQ(prevYearData.filter(d=>d.month==mon));
+        let momGrowth = percentChange(prevQty, thisQty);
+        ytdRun += thisQty;
+
+        let ytdPrevRun = sumQ(
+          prevYearData.filter(d=>
+            monthOrder.indexOf(d.month)<=
+            monthOrder.indexOf(mon)
+          )
+        );
+
+        let ytdGrowthRun = percentChange(ytdPrevRun, ytdRun);
+
+        html += `
+        <tr>
+          <td>${mon}</td>
+          <td>${thisQty}</td>
+          <td>${showPercent(momGrowth)}</td>
+          <td>${ytdRun}</td>
+          <td>${showPercent(ytdGrowthRun)}</td>
+        </tr>`;
+      });
+
+      html += `</table><br>`;
+    }
+  }
+
+  document.getElementById("results").innerHTML = html;
+}
+
+// — Helpers —
+function sumQ(arr){
+  return arr.reduce((s,d)=>s+d.qty,0);
+}
+
+function percentChange(oldN, newN){
+  if(oldN==0) return 0;
+  return ((newN-oldN)/oldN*100).toFixed(1);
+}
+
+function showPercent(v){
+  let cls = v>=0 ? "positive" : "negative";
+  let sign = v>=0 ? "+" : "";
+  return `<span class="${cls}">${sign}${v}%</span>`;
+}
+
+</script>
+</body>
+</html>
