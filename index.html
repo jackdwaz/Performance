@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Sales Analytics Dashboard</title>
+<title>Advanced Sales Analytics Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -33,6 +33,7 @@ select{
     display:flex;
     gap:20px;
     flex-wrap:wrap;
+    margin-bottom:20px;
 }
 
 .card{
@@ -44,15 +45,8 @@ select{
     min-width:250px;
 }
 
-.card h3{
-    margin:0;
-    font-size:14px;
-    color:#555;
-}
-
-.card h1{
-    margin:5px 0 0 0;
-}
+.card h3{margin:0;font-size:14px;color:#555;}
+.card h1{margin:5px 0 0 0;}
 
 .positive{color:green;font-weight:bold;}
 .negative{color:red;font-weight:bold;}
@@ -62,36 +56,14 @@ canvas{
     padding:15px;
     border-radius:12px;
     box-shadow:0 4px 12px rgba(0,0,0,0.08);
-    margin-top:20px;
+    margin-bottom:20px;
 }
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:20px;
-    background:white;
-    border-radius:12px;
-    overflow:hidden;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
-}
-
-th,td{
-    padding:10px;
-    text-align:center;
-}
-
-th{
-    background:#111;
-    color:white;
-}
-
-tr:nth-child(even){background:#f9f9f9;}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Sales Analytics Dashboard</h2>
+<h2>📊 Advanced Sales Analytics Dashboard</h2>
 
 <div class="filters">
 <select id="store"><option value="">All Stores</option></select>
@@ -106,22 +78,24 @@ tr:nth-child(even){background:#f9f9f9;}
 <h3>Total Sales</h3>
 <h1 id="totalSales">0</h1>
 </div>
-
 <div class="card">
 <h3>YTD Sales</h3>
 <h1 id="ytdSales">0</h1>
 </div>
-
 <div class="card">
-<h3>Growth %</h3>
+<h3>Growth % (vs Last Year)</h3>
 <h1 id="growthRate">0%</h1>
 </div>
 </div>
 
-<canvas id="barChart"></canvas>
-<canvas id="pieChart"></canvas>
+<h3>📊 Month on Month Trend</h3>
+<canvas id="momChart"></canvas>
 
-<div id="tableArea"></div>
+<h3>📈 Year on Year Comparison</h3>
+<canvas id="yoyChart"></canvas>
+
+<h3>🥧 Category Distribution</h3>
+<canvas id="pieChart"></canvas>
 
 <script>
 
@@ -129,7 +103,8 @@ const SHEET_ID="151Stj3jdaqv-FG7CgOYGX87W8QEdDQJwzZNUY9t_aKE";
 const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?`;
 
 let rawData=[];
-let barChart,pieChart;
+let momChart,yoyChart,pieChart;
+
 const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 fetch(URL)
@@ -165,7 +140,8 @@ sel.value=current;
 function initFilters(){
 populate("store",unique(rawData.map(d=>d.store)),"All Stores");
 populate("year",unique(rawData.map(d=>d.year)),"All Years");
-populate("month",unique(rawData.map(d=>d.month)),"All Months");
+populate("month",unique(rawData.map(d=>d.month))
+.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)),"All Months");
 populate("product",unique(rawData.map(d=>d.product)),"All Products");
 populate("category",unique(rawData.map(d=>d.category)),"All Categories");
 
@@ -204,20 +180,18 @@ updateFilters(data);
 let total=sum(data);
 totalSales.innerText=total;
 
-let ytdData=data.filter(d=>!fYear||d.year==fYear);
-let ytd=sum(ytdData);
+let selectedYear=fYear || unique(data.map(d=>d.year)).sort().pop();
+let ytd=sum(data.filter(d=>d.year==selectedYear));
 ytdSales.innerText=ytd;
 
-let prevYear=(parseInt(fYear||0)-1)+"";
-let prevData=rawData.filter(d=>d.year==prevYear && (!fStore||d.store==fStore));
-let prevTotal=sum(prevData);
-
-let g=growth(prevTotal,total);
+let prevYear=(parseInt(selectedYear)-1)+"";
+let prevTotal=sum(rawData.filter(d=>d.year==prevYear && (!fStore||d.store==fStore)));
+let g=growth(prevTotal,ytd);
 growthRate.innerHTML=`<span class="${g>=0?'positive':'negative'}">${g.toFixed(1)}%</span>`;
 
-drawBar(data);
+drawMoM(data,selectedYear);
+drawYoY(data);
 drawPie(data);
-buildTable(data);
 }
 
 function updateFilters(data){
@@ -228,57 +202,70 @@ populate("product",unique(data.map(d=>d.product)),"All Products");
 populate("category",unique(data.map(d=>d.category)),"All Categories");
 }
 
-function drawBar(data){
+function drawMoM(data,year){
+
+let filtered=data.filter(d=>d.year==year);
+
+let grouped={};
+monthOrder.forEach(m=>grouped[m]=0);
+
+filtered.forEach(d=>grouped[d.month]+=d.qty);
+
+let labels=monthOrder.filter(m=>grouped[m]>0);
+let values=labels.map(m=>grouped[m]);
+
+if(momChart) momChart.destroy();
+
+momChart=new Chart(document.getElementById("momChart"),{
+type:"bar",
+data:{labels:labels,datasets:[{label:"Monthly Sales "+year,data:values}]},
+options:{responsive:true}
+});
+}
+
+function drawYoY(data){
+
 let grouped={};
 data.forEach(d=>{
-if(!grouped[d.month]) grouped[d.month]=0;
-grouped[d.month]+=d.qty;
+if(!grouped[d.year]) grouped[d.year]=0;
+grouped[d.year]+=d.qty;
 });
-let labels=Object.keys(grouped)
-.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b));
-let values=labels.map(l=>grouped[l]);
 
-if(barChart) barChart.destroy();
+let labels=Object.keys(grouped).sort();
+let values=labels.map(y=>grouped[y]);
 
-barChart=new Chart(document.getElementById('barChart'),{
-type:'bar',
-data:{labels:labels,datasets:[{label:'Monthly Sales',data:values}]},
+if(yoyChart) yoyChart.destroy();
+
+yoyChart=new Chart(document.getElementById("yoyChart"),{
+type:"line",
+data:{labels:labels,datasets:[{label:"Yearly Sales",data:values}]},
 options:{responsive:true}
 });
 }
 
 function drawPie(data){
+
 let grouped={};
 data.forEach(d=>{
 if(!grouped[d.category]) grouped[d.category]=0;
 grouped[d.category]+=d.qty;
 });
+
 let labels=Object.keys(grouped);
-let values=labels.map(l=>grouped[l]);
+let values=labels.map(c=>grouped[c]);
 
 if(pieChart) pieChart.destroy();
 
-pieChart=new Chart(document.getElementById('pieChart'),{
-type:'pie',
+pieChart=new Chart(document.getElementById("pieChart"),{
+type:"pie",
 data:{labels:labels,datasets:[{data:values}]},
-options:{responsive:true}
-});
+options:{
+responsive:true,
+plugins:{
+legend:{position:"top"}
 }
-
-function buildTable(data){
-let html="<table><tr><th>Store Name</th><th>Year</th><th>Month</th><th>Product</th><th>Category</th><th>Quantity</th></tr>";
-data.forEach(d=>{
-html+=`<tr>
-<td>${d.store}</td>
-<td>${d.year}</td>
-<td>${d.month}</td>
-<td>${d.product}</td>
-<td>${d.category}</td>
-<td>${d.qty}</td>
-</tr>`;
+}
 });
-html+="</table>";
-tableArea.innerHTML=html||"No Data Found";
 }
 
 </script>
