@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Sales Matrix - Stable Version</title>
+<title>Swllout Performance Dashboard</title>
 
 <style>
 body{
@@ -81,29 +81,38 @@ const json=JSON.parse(rep.substring(47).slice(0,-2));
 const rows=json.table.rows;
 
 rawData=rows.map(r=>({
-store:r.c[0]?.v,
-location:r.c[1]?.v,
-year:String(r.c[2]?.v),
-month:r.c[3]?.v,
-category:r.c[4]?.v,
-product:r.c[5]?.v,
+
+store:clean(r.c[0]?.v),
+location:clean(r.c[1]?.v),
+year:clean(r.c[2]?.v),
+month:clean(r.c[3]?.v),
+category:clean(r.c[4]?.v),
+product:clean(r.c[5]?.v),
 qty:Number(r.c[6]?.v)||0
+
 })).filter(r=>r.store && r.qty>0);
 
 initFilters();
 });
+
+function clean(val){
+return String(val||"")
+.replace(/\u00A0/g,"")
+.trim();
+}
 
 function unique(arr){ return [...new Set(arr)]; }
 function sum(arr){ return arr.reduce((a,b)=>a+b.qty,0); }
 
 function populate(id, values, label, isMonth=false){
 let sel=document.getElementById(id);
-
 sel.innerHTML=`<option value="">${label}</option>`;
 
 if(isMonth){
-values.forEach(v=>{
-sel.innerHTML+=`<option value="${v}">${v}</option>`;
+monthOrder.forEach(m=>{
+if(values.includes(m)){
+sel.innerHTML+=`<option value="${m}">${m}</option>`;
+}
 });
 }else{
 values.sort().forEach(v=>{
@@ -119,7 +128,7 @@ populate("location", unique(rawData.map(d=>d.location)), "All Locations");
 populate("year", unique(rawData.map(d=>d.year)), "All Years");
 populate("product", unique(rawData.map(d=>d.product)), "All Products");
 populate("category", unique(rawData.map(d=>d.category)), "All Categories");
-populate("month", monthOrder, "", true);
+populate("month", unique(rawData.map(d=>d.month)), "", true);
 
 document.querySelectorAll("select").forEach(s=>{
 s.addEventListener("change", render);
@@ -130,12 +139,18 @@ render();
 
 function getFilteredData(){
 
+let fStore=clean(store.value);
+let fLocation=clean(location.value);
+let fYear=clean(year.value);
+let fProduct=clean(product.value);
+let fCategory=clean(category.value);
+
 return rawData.filter(d =>
-(!store.value || d.store === store.value) &&
-(!location.value || d.location === location.value) &&
-(!year.value || d.year === year.value) &&
-(!product.value || d.product === product.value) &&
-(!category.value || d.category === category.value)
+(!fStore || d.store === fStore) &&
+(!fLocation || d.location === fLocation) &&
+(!fYear || d.year === fYear) &&
+(!fProduct || d.product === fProduct) &&
+(!fCategory || d.category === fCategory)
 );
 
 }
@@ -143,7 +158,7 @@ return rawData.filter(d =>
 function render(){
 
 let data=getFilteredData();
-let selectedMonths=[...month.selectedOptions].map(o=>o.value).filter(v=>v);
+let selectedMonths=[...month.selectedOptions].map(o=>clean(o.value)).filter(v=>v);
 
 displayMatrix(data, selectedMonths);
 }
@@ -153,7 +168,7 @@ function displayMatrix(data, selectedMonths){
 let years = unique(data.map(d=>d.year)).sort();
 
 if(years.length===0){
-output.innerHTML="No Data Found";
+output.innerHTML="<b>No Data Found</b>";
 return;
 }
 
