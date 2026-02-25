@@ -2,7 +2,8 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Advanced Sales Analytics Dashboard</title>
+<title>Sales Comparison Dashboard</title>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -29,27 +30,32 @@ select{
     border:1px solid #ccc;
 }
 
-.card-container{
-    display:flex;
-    gap:20px;
-    flex-wrap:wrap;
-    margin-bottom:20px;
+.tabs{
+    margin-top:20px;
 }
 
-.card{
-    background:white;
-    padding:15px;
-    border-radius:12px;
-    box-shadow:0 4px 15px rgba(0,0,0,0.08);
-    flex:1;
-    min-width:250px;
+.tab-btn{
+    padding:8px 15px;
+    border:none;
+    margin-right:10px;
+    cursor:pointer;
+    border-radius:6px;
+    background:#ddd;
 }
 
-.card h3{margin:0;font-size:14px;color:#555;}
-.card h1{margin:5px 0 0 0;}
+.tab-btn.active{
+    background:#111;
+    color:white;
+}
 
-.positive{color:green;font-weight:bold;}
-.negative{color:red;font-weight:bold;}
+.tab-content{
+    display:none;
+    margin-top:20px;
+}
+
+.tab-content.active{
+    display:block;
+}
 
 canvas{
     background:white;
@@ -58,12 +64,34 @@ canvas{
     box-shadow:0 4px 12px rgba(0,0,0,0.08);
     margin-bottom:20px;
 }
+
+.table-box{
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+th,td{
+    padding:8px;
+    text-align:center;
+}
+
+th{
+    background:#111;
+    color:white;
+}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Advanced Sales Analytics Dashboard</h2>
+<h2>📊 Sales Comparison Dashboard</h2>
 
 <div class="filters">
 <select id="store"><option value="">All Stores</option></select>
@@ -73,29 +101,30 @@ canvas{
 <select id="category"><option value="">All Categories</option></select>
 </div>
 
-<div class="card-container">
-<div class="card">
-<h3>Total Sales</h3>
-<h1 id="totalSales">0</h1>
+<div class="tabs">
+<button class="tab-btn active" onclick="openTab('monthTab')">Month Comparison</button>
+<button class="tab-btn" onclick="openTab('yearTab')">Year Comparison</button>
+<button class="tab-btn" onclick="openTab('rankTab')">Ranking</button>
 </div>
-<div class="card">
-<h3>YTD Sales</h3>
-<h1 id="ytdSales">0</h1>
+
+<div id="monthTab" class="tab-content active">
+<canvas id="monthComparisonChart"></canvas>
 </div>
-<div class="card">
-<h3>Growth % (vs Last Year)</h3>
-<h1 id="growthRate">0%</h1>
+
+<div id="yearTab" class="tab-content">
+<canvas id="yearComparisonChart"></canvas>
+</div>
+
+<div id="rankTab" class="tab-content">
+<div class="table-box">
+<div id="rankingTable"></div>
 </div>
 </div>
 
-<h3>📊 Month on Month Trend</h3>
-<canvas id="momChart"></canvas>
-
-<h3>📈 Year on Year Comparison</h3>
-<canvas id="yoyChart"></canvas>
-
-<h3>🥧 Category Distribution</h3>
-<canvas id="pieChart"></canvas>
+<h3>📋 Detailed Data</h3>
+<div class="table-box">
+<div id="detailTable"></div>
+</div>
 
 <script>
 
@@ -103,7 +132,7 @@ const SHEET_ID="151Stj3jdaqv-FG7CgOYGX87W8QEdDQJwzZNUY9t_aKE";
 const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?`;
 
 let rawData=[];
-let momChart,yoyChart,pieChart;
+let monthChart,yearChart;
 
 const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -154,11 +183,6 @@ render();
 
 function sum(arr){return arr.reduce((a,b)=>a+b.qty,0)}
 
-function growth(oldV,newV){
-if(oldV==0) return 0;
-return ((newV-oldV)/oldV*100);
-}
-
 function render(){
 
 let fStore=store.value;
@@ -175,97 +199,100 @@ return (!fStore||d.store==fStore)
 &&(!fCategory||d.category==fCategory);
 });
 
-updateFilters(data);
-
-let total=sum(data);
-totalSales.innerText=total;
-
-let selectedYear=fYear || unique(data.map(d=>d.year)).sort().pop();
-let ytd=sum(data.filter(d=>d.year==selectedYear));
-ytdSales.innerText=ytd;
-
-let prevYear=(parseInt(selectedYear)-1)+"";
-let prevTotal=sum(rawData.filter(d=>d.year==prevYear && (!fStore||d.store==fStore)));
-let g=growth(prevTotal,ytd);
-growthRate.innerHTML=`<span class="${g>=0?'positive':'negative'}">${g.toFixed(1)}%</span>`;
-
-drawMoM(data,selectedYear);
-drawYoY(data);
-drawPie(data);
+drawMonthComparison(data,fMonth);
+drawYearComparison(data,fYear);
+buildRanking(data);
+buildDetailTable(data);
 }
 
-function updateFilters(data){
-populate("year",unique(data.map(d=>d.year)),"All Years");
-populate("month",unique(data.map(d=>d.month))
-.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)),"All Months");
-populate("product",unique(data.map(d=>d.product)),"All Products");
-populate("category",unique(data.map(d=>d.category)),"All Categories");
+function drawMonthComparison(data,month){
+
+if(!month){
+if(monthChart) monthChart.destroy();
+return;
 }
 
-function drawMoM(data,year){
+let years=unique(data.map(d=>d.year)).sort();
+let values=years.map(y=>sum(data.filter(d=>d.year==y && d.month==month)));
 
-let filtered=data.filter(d=>d.year==year);
+if(monthChart) monthChart.destroy();
 
-let grouped={};
-monthOrder.forEach(m=>grouped[m]=0);
-
-filtered.forEach(d=>grouped[d.month]+=d.qty);
-
-let labels=monthOrder.filter(m=>grouped[m]>0);
-let values=labels.map(m=>grouped[m]);
-
-if(momChart) momChart.destroy();
-
-momChart=new Chart(document.getElementById("momChart"),{
+monthChart=new Chart(document.getElementById("monthComparisonChart"),{
 type:"bar",
-data:{labels:labels,datasets:[{label:"Monthly Sales "+year,data:values}]},
+data:{
+labels:years,
+datasets:[{label:month+" Sales",data:values}]
+},
 options:{responsive:true}
 });
 }
 
-function drawYoY(data){
+function drawYearComparison(data,year){
 
-let grouped={};
-data.forEach(d=>{
-if(!grouped[d.year]) grouped[d.year]=0;
-grouped[d.year]+=d.qty;
-});
+if(!year){
+if(yearChart) yearChart.destroy();
+return;
+}
 
-let labels=Object.keys(grouped).sort();
-let values=labels.map(y=>grouped[y]);
+let labels=monthOrder;
+let values=labels.map(m=>sum(data.filter(d=>d.year==year && d.month==m)));
 
-if(yoyChart) yoyChart.destroy();
+if(yearChart) yearChart.destroy();
 
-yoyChart=new Chart(document.getElementById("yoyChart"),{
-type:"line",
-data:{labels:labels,datasets:[{label:"Yearly Sales",data:values}]},
+yearChart=new Chart(document.getElementById("yearComparisonChart"),{
+type:"bar",
+data:{
+labels:labels,
+datasets:[{label:year+" Monthly Sales",data:values}]
+},
 options:{responsive:true}
 });
 }
 
-function drawPie(data){
+function buildRanking(data){
 
 let grouped={};
 data.forEach(d=>{
-if(!grouped[d.category]) grouped[d.category]=0;
-grouped[d.category]+=d.qty;
+if(!grouped[d.store]) grouped[d.store]=0;
+grouped[d.store]+=d.qty;
 });
 
-let labels=Object.keys(grouped);
-let values=labels.map(c=>grouped[c]);
+let sorted=Object.entries(grouped).sort((a,b)=>b[1]-a[1]);
 
-if(pieChart) pieChart.destroy();
+let html="<table><tr><th>Rank</th><th>Store Name</th><th>Total Sales</th></tr>";
 
-pieChart=new Chart(document.getElementById("pieChart"),{
-type:"pie",
-data:{labels:labels,datasets:[{data:values}]},
-options:{
-responsive:true,
-plugins:{
-legend:{position:"top"}
-}
-}
+sorted.forEach((s,i)=>{
+html+=`<tr><td>${i+1}</td><td>${s[0]}</td><td>${s[1]}</td></tr>`;
 });
+
+html+="</table>";
+rankingTable.innerHTML=html;
+}
+
+function buildDetailTable(data){
+
+let html="<table><tr><th>Store Name</th><th>Year</th><th>Month</th><th>Product</th><th>Category</th><th>Quantity</th></tr>";
+
+data.forEach(d=>{
+html+=`<tr>
+<td>${d.store}</td>
+<td>${d.year}</td>
+<td>${d.month}</td>
+<td>${d.product}</td>
+<td>${d.category}</td>
+<td>${d.qty}</td>
+</tr>`;
+});
+
+html+="</table>";
+detailTable.innerHTML=html;
+}
+
+function openTab(tab){
+document.querySelectorAll(".tab-content").forEach(t=>t.classList.remove("active"));
+document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+document.getElementById(tab).classList.add("active");
+event.target.classList.add("active");
 }
 
 </script>
