@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Sales Analysis Dashboard</title>
+<title>Sales Matrix Dashboard</title>
 
 <style>
 body{
@@ -28,42 +28,32 @@ select{
     border:1px solid #ccc;
 }
 
-.section{
-    margin-bottom:25px;
-}
-
-.year-card{
+table{
+    width:100%;
+    border-collapse:collapse;
     background:white;
-    padding:15px;
-    border-radius:12px;
     box-shadow:0 4px 12px rgba(0,0,0,0.08);
-    margin-bottom:15px;
 }
 
-.month-row{
-    display:flex;
-    justify-content:space-between;
-    padding:6px 0;
-    border-bottom:1px solid #eee;
+th,td{
+    padding:8px;
+    text-align:center;
+    border:1px solid #eee;
 }
 
-.month-row:last-child{
-    border-bottom:none;
+th{
+    background:#111;
+    color:white;
 }
 
 .growth-pos{color:green;font-weight:bold;}
 .growth-neg{color:red;font-weight:bold;}
-
-.title{
-    font-weight:bold;
-    margin-bottom:10px;
-}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Sales Analysis Dashboard</h2>
+<h2>📊 Sales Matrix Dashboard</h2>
 
 <div class="filters">
 <select id="store"><option value="">All Stores</option></select>
@@ -105,10 +95,6 @@ initFilters();
 
 function unique(arr){return [...new Set(arr)]}
 function sum(arr){return arr.reduce((a,b)=>a+b.qty,0)}
-function growth(oldV,newV){
-if(oldV==0) return 0;
-return ((newV-oldV)/oldV*100).toFixed(1);
-}
 
 function populate(id,values,label){
 let sel=document.getElementById(id);
@@ -152,92 +138,53 @@ return (!fStore||d.store==fStore)
 &&(!fCategory||d.category==fCategory);
 });
 
-displayData(data,fMonth,fYear);
+displayMatrix(data,fMonth);
 }
 
-function displayData(data,selectedMonth,selectedYear){
+function displayMatrix(data,selectedMonth){
 
-let html="";
+let years=unique(data.map(d=>d.year)).sort();
+let html="<table><tr><th>Month</th>";
 
-if(selectedMonth){
-
-let grouped={};
-data.forEach(d=>{
-if(!grouped[d.year]) grouped[d.year]=0;
-grouped[d.year]+=d.qty;
+years.forEach(y=>{
+html+=`<th>${y}</th>`;
 });
 
-Object.keys(grouped).sort().forEach(y=>{
-let prevYear=(parseInt(y)-1)+"";
-let prevVal=sum(rawData.filter(d=>d.year==prevYear && d.month==selectedMonth));
-let g=growth(prevVal,grouped[y]);
+html+="</tr>";
 
-html+=`
-<div class="year-card">
-<div class="title">${selectedMonth} ${y}</div>
-<div>Total: ${grouped[y]}</div>
-<div class="${g>=0?'growth-pos':'growth-neg'}">
-Growth vs ${prevYear}: ${g}%
-</div>
-</div>`;
-});
-
-}
-
-else if(selectedYear){
-
-let months=monthOrder;
-
-html+=`<div class="year-card"><div class="title">${selectedYear}</div>`;
-
-let prevYear=(parseInt(selectedYear)-1)+"";
+let months = selectedMonth ? [selectedMonth] : monthOrder;
 
 months.forEach(m=>{
-let current=sum(data.filter(d=>d.month==m));
-if(current>0){
-let prev=sum(rawData.filter(d=>d.year==prevYear && d.month==m));
-let g=growth(prev,current);
 
-html+=`
-<div class="month-row">
-<div>${m}</div>
-<div>${current}</div>
-<div class="${g>=0?'growth-pos':'growth-neg'}">${g}%</div>
-</div>`;
-}
-});
+let row="<tr><td><b>"+m+"</b></td>";
 
-html+="</div>";
+let prevVal=null;
 
+years.forEach(y=>{
+
+let val=sum(data.filter(d=>d.year==y && d.month==m));
+let growthHTML="";
+
+if(prevVal!==null && prevVal>0){
+let g=((val-prevVal)/prevVal*100).toFixed(1);
+let cls=g>=0?"growth-pos":"growth-neg";
+growthHTML=`<div class="${cls}">${g}%</div>`;
 }
 
-else{
+row+=`<td>${val}${growthHTML}</td>`;
+prevVal=val;
 
-let grouped={};
-
-data.forEach(d=>{
-if(!grouped[d.year]) grouped[d.year]={};
-if(!grouped[d.year][d.month]) grouped[d.year][d.month]=0;
-grouped[d.year][d.month]+=d.qty;
 });
 
-Object.keys(grouped).sort().forEach(y=>{
-html+=`<div class="year-card"><div class="title">${y}</div>`;
-monthOrder.forEach(m=>{
-if(grouped[y][m]){
-html+=`
-<div class="month-row">
-<div>${m}</div>
-<div>${grouped[y][m]}</div>
-</div>`;
-}
-});
-html+="</div>";
+row+="</tr>";
+html+=row;
+
 });
 
-}
+html+="</table>";
 
-output.innerHTML=html||"<p>No Data Found</p>";
+output.innerHTML=html || "No Data Found";
+
 }
 
 </script>
