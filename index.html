@@ -74,6 +74,7 @@ function initFilters() {
   populateDropdown("filterProd", unique(allData.map(d=>d.product)));
   populateDropdown("filterCat", unique(allData.map(d=>d.category)));
 
+
   attachListeners();
   showResults();
 }
