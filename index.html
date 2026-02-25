@@ -3,19 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <title>Sales Analytics Dashboard</title>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
-    font-family: 'Segoe UI', sans-serif;
-    background:#f1f3f6;
+    font-family:'Segoe UI',sans-serif;
+    background:#f4f6f9;
     margin:20px;
 }
 
-h2{
-    margin-bottom:15px;
-}
+h2{margin-bottom:15px;}
 
 .filters{
     background:white;
@@ -57,8 +54,16 @@ select{
     margin:5px 0 0 0;
 }
 
-.positive{color:green;}
-.negative{color:red;}
+.positive{color:green;font-weight:bold;}
+.negative{color:red;font-weight:bold;}
+
+canvas{
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    margin-top:20px;
+}
 
 table{
     width:100%;
@@ -80,17 +85,7 @@ th{
     color:white;
 }
 
-tr:nth-child(even){
-    background:#f9f9f9;
-}
-
-canvas{
-    background:white;
-    padding:15px;
-    border-radius:12px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
-    margin-top:20px;
-}
+tr:nth-child(even){background:#f9f9f9;}
 </style>
 </head>
 
@@ -99,11 +94,11 @@ canvas{
 <h2>📊 Sales Analytics Dashboard</h2>
 
 <div class="filters">
-<select id="store"></select>
-<select id="year"></select>
-<select id="month"></select>
-<select id="product"></select>
-<select id="category"></select>
+<select id="store"><option value="">All Stores</option></select>
+<select id="year"><option value="">All Years</option></select>
+<select id="month"><option value="">All Months</option></select>
+<select id="product"><option value="">All Products</option></select>
+<select id="category"><option value="">All Categories</option></select>
 </div>
 
 <div class="card-container">
@@ -131,63 +126,62 @@ canvas{
 <script>
 
 const SHEET_ID="151Stj3jdaqv-FG7CgOYGX87W8QEdDQJwzZNUY9t_aKE";
-const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?`;
 
 let rawData=[];
+let barChart,pieChart;
 const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 fetch(URL)
 .then(res=>res.text())
-.then(data=>{
-    const rows=data.split("\n").slice(1);
+.then(rep=>{
+const json=JSON.parse(rep.substring(47).slice(0,-2));
+const rows=json.table.rows;
 
-    rawData=rows.map(r=>{
-        let c=r.split(",");
-        return{
-            store:c[0]?.trim(),
-            year:c[1]?.trim(),
-            month:c[2]?.trim(),
-            product:c[3]?.trim(),
-            category:c[4]?.trim(),
-            qty:parseFloat(c[5])||0
-        }
-    }).filter(r=>r.store && r.qty>0);
+rawData=rows.map(r=>({
+store:r.c[0]?.v,
+year:String(r.c[1]?.v),
+month:r.c[2]?.v,
+product:r.c[3]?.v,
+category:r.c[4]?.v,
+qty:Number(r.c[5]?.v)||0
+})).filter(r=>r.store && r.qty>0);
 
-    initFilters();
+initFilters();
 });
 
 function unique(arr){return [...new Set(arr)]}
 
-function initFilters(){
-    populate("store",unique(rawData.map(d=>d.store)));
-    populate("year",unique(rawData.map(d=>d.year)));
-    populate("month",monthOrder);
-    populate("product",unique(rawData.map(d=>d.product)));
-    populate("category",unique(rawData.map(d=>d.category)));
-
-    document.querySelectorAll("select").forEach(s=>{
-        s.addEventListener("change",render);
-    });
-
-    render();
+function populate(id,values,label){
+let sel=document.getElementById(id);
+let current=sel.value;
+sel.innerHTML=`<option value="">${label}</option>`;
+values.sort().forEach(v=>{
+if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
+});
+sel.value=current;
 }
 
-function populate(id,values){
-    let sel=document.getElementById(id);
-    sel.innerHTML="<option value=''>All</option>";
-    values.sort().forEach(v=>{
-        if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
-    });
+function initFilters(){
+populate("store",unique(rawData.map(d=>d.store)),"All Stores");
+populate("year",unique(rawData.map(d=>d.year)),"All Years");
+populate("month",unique(rawData.map(d=>d.month)),"All Months");
+populate("product",unique(rawData.map(d=>d.product)),"All Products");
+populate("category",unique(rawData.map(d=>d.category)),"All Categories");
+
+document.querySelectorAll("select").forEach(s=>{
+s.addEventListener("change",render);
+});
+
+render();
 }
 
 function sum(arr){return arr.reduce((a,b)=>a+b.qty,0)}
 
 function growth(oldV,newV){
-    if(oldV==0) return 0;
-    return ((newV-oldV)/oldV*100);
+if(oldV==0) return 0;
+return ((newV-oldV)/oldV*100);
 }
-
-let barChart,pieChart;
 
 function render(){
 
@@ -202,8 +196,7 @@ return (!fStore||d.store==fStore)
 &&(!fYear||d.year==fYear)
 &&(!fMonth||d.month==fMonth)
 &&(!fProduct||d.product==fProduct)
-&&(!fCategory||d.category==fCategory)
-&&d.qty>0;
+&&(!fCategory||d.category==fCategory);
 });
 
 updateFilters(data);
@@ -211,12 +204,12 @@ updateFilters(data);
 let total=sum(data);
 totalSales.innerText=total;
 
-let ytdData=data.filter(d=>d.year==fYear||!fYear);
+let ytdData=data.filter(d=>!fYear||d.year==fYear);
 let ytd=sum(ytdData);
 ytdSales.innerText=ytd;
 
 let prevYear=(parseInt(fYear||0)-1)+"";
-let prevData=rawData.filter(d=>d.year==prevYear && d.store==fStore);
+let prevData=rawData.filter(d=>d.year==prevYear && (!fStore||d.store==fStore));
 let prevTotal=sum(prevData);
 
 let g=growth(prevTotal,total);
@@ -228,11 +221,11 @@ buildTable(data);
 }
 
 function updateFilters(data){
-populate("year",unique(data.map(d=>d.year)));
+populate("year",unique(data.map(d=>d.year)),"All Years");
 populate("month",unique(data.map(d=>d.month))
-.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)));
-populate("product",unique(data.map(d=>d.product)));
-populate("category",unique(data.map(d=>d.category)));
+.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)),"All Months");
+populate("product",unique(data.map(d=>d.product)),"All Products");
+populate("category",unique(data.map(d=>d.category)),"All Categories");
 }
 
 function drawBar(data){
@@ -241,17 +234,15 @@ data.forEach(d=>{
 if(!grouped[d.month]) grouped[d.month]=0;
 grouped[d.month]+=d.qty;
 });
-
 let labels=Object.keys(grouped)
 .sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b));
 let values=labels.map(l=>grouped[l]);
 
 if(barChart) barChart.destroy();
 
-barChart=new Chart(barChartCtx,{
+barChart=new Chart(document.getElementById('barChart'),{
 type:'bar',
-data:{labels:labels,
-datasets:[{label:'Monthly Sales',data:values}]},
+data:{labels:labels,datasets:[{label:'Monthly Sales',data:values}]},
 options:{responsive:true}
 });
 }
@@ -262,36 +253,33 @@ data.forEach(d=>{
 if(!grouped[d.category]) grouped[d.category]=0;
 grouped[d.category]+=d.qty;
 });
-
 let labels=Object.keys(grouped);
 let values=labels.map(l=>grouped[l]);
 
 if(pieChart) pieChart.destroy();
 
-pieChart=new Chart(pieChartCtx,{
+pieChart=new Chart(document.getElementById('pieChart'),{
 type:'pie',
-data:{labels:labels,
-datasets:[{data:values}]},
+data:{labels:labels,datasets:[{data:values}]},
 options:{responsive:true}
 });
 }
 
 function buildTable(data){
-let html="<table><tr><th>Store Name</th><th>Year</th><th>Month</th><th>Quantity</th></tr>";
+let html="<table><tr><th>Store Name</th><th>Year</th><th>Month</th><th>Product</th><th>Category</th><th>Quantity</th></tr>";
 data.forEach(d=>{
 html+=`<tr>
 <td>${d.store}</td>
 <td>${d.year}</td>
 <td>${d.month}</td>
+<td>${d.product}</td>
+<td>${d.category}</td>
 <td>${d.qty}</td>
 </tr>`;
 });
 html+="</table>";
-tableArea.innerHTML=html;
+tableArea.innerHTML=html||"No Data Found";
 }
-
-const barChartCtx=document.getElementById('barChart');
-const pieChartCtx=document.getElementById('pieChart');
 
 </script>
 
