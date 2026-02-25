@@ -57,7 +57,6 @@ th{
 
 <div class="filters">
 <select id="store"><option value="">All Stores</option></select>
-<select id="location"><option value="">All Locations</option></select>
 <select id="year"><option value="">All Years</option></select>
 <select id="month"><option value="">All Months</option></select>
 <select id="product"><option value="">All Products</option></select>
@@ -82,7 +81,6 @@ const rows=json.table.rows;
 
 rawData=rows.map(r=>({
 store:r.c[0]?.v,
-location:r.c[1]?.v,
 year:String(r.c[2]?.v),
 month:r.c[3]?.v,
 product:r.c[4]?.v,
@@ -106,7 +104,6 @@ if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
 
 function initFilters(){
 populate("store",unique(rawData.map(d=>d.store)),"All Stores");
-populate("location",unique(rawData.map(d=>d.location)),"All Locations");
 populate("year",unique(rawData.map(d=>d.year)),"All Years");
 populate("month",unique(rawData.map(d=>d.month))
 .sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b)),"All Months");
@@ -131,7 +128,6 @@ let fCategory=category.value;
 
 let data=rawData.filter(d=>{
 return (!fStore||d.store==fStore)
-&&(!fLocation||d.location==fLocation)
 &&(!fYear||d.year==fYear)
 &&(!fMonth||d.month==fMonth)
 &&(!fProduct||d.product==fProduct)
