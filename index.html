@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Final Location-Fixed Sales Matrix</title>
+<title>Smart Dependent Sales Matrix</title>
 
 <style>
 body{
@@ -53,7 +53,7 @@ th{
 
 <body>
 
-<h2>📊 Sales Matrix Dashboard</h2>
+<h2>📊 Smart Dependent Sales Matrix</h2>
 
 <div class="filters">
 <select id="store"></select>
@@ -93,87 +93,109 @@ qty:Number(r.c[6]?.v)||0
 initFilters();
 });
 
-function unique(arr){return [...new Set(arr)]}
-function sum(arr){return arr.reduce((a,b)=>a+b.qty,0)}
+function unique(arr){ return [...new Set(arr)]; }
+function sum(arr){ return arr.reduce((a,b)=>a+b.qty,0); }
+
+function populateSelect(id, values, label, isMonth=false){
+
+let sel=document.getElementById(id);
+let current = isMonth
+? [...sel.selectedOptions].map(o=>o.value)
+: sel.value;
+
+sel.innerHTML=`<option value="">${label}</option>`;
+
+if(isMonth){
+values.sort((a,b)=>monthOrder.indexOf(a)-monthOrder.indexOf(b));
+}else{
+values.sort();
+}
+
+values.forEach(v=>{
+if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
+});
+
+if(isMonth){
+current.forEach(val=>{
+let opt=[...sel.options].find(o=>o.value===val);
+if(opt) opt.selected=true;
+});
+}else{
+let opt=[...sel.options].find(o=>o.value===current);
+if(opt) opt.selected=true;
+}
+
+}
 
 function initFilters(){
 
-populate("store", unique(rawData.map(d=>d.store)), "All Stores");
-populate("location", unique(rawData.map(d=>d.location)), "All Locations");
-populate("year", unique(rawData.map(d=>d.year)), "All Years");
-populate("product", unique(rawData.map(d=>d.product)), "All Products");
-populate("category", unique(rawData.map(d=>d.category)), "All Categories");
-populate("month", monthOrder, "", true);
+updateDropdowns(rawData);
 
-store.addEventListener("change", updateLocationOptions);
 document.querySelectorAll("select").forEach(s=>{
-s.addEventListener("change", render);
+s.addEventListener("change", handleChange);
 });
 
 render();
 }
 
-function populate(id, values, label, monthSort=false){
-let sel=document.getElementById(id);
-let current=[...sel.selectedOptions].map(o=>o.value);
+function getFilterValues(){
 
-sel.innerHTML=`<option value="">${label}</option>`;
+return {
+store: store.value,
+location: location.value,
+year: year.value,
+product: product.value,
+category: category.value,
+months: [...month.selectedOptions].map(o=>o.value).filter(v=>v)
+};
 
-if(monthSort){
-values.forEach(v=>{
-sel.innerHTML+=`<option value="${v}">${v}</option>`;
-});
-}else{
-values.sort().forEach(v=>{
-if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
-});
 }
 
-current.forEach(val=>{
-let opt=[...sel.options].find(o=>o.value===val);
-if(opt) opt.selected=true;
-});
-}
+function filterData(data, filters){
 
-function updateLocationOptions(){
-
-let selectedStore=store.value;
-
-if(!selectedStore){
-populate("location", unique(rawData.map(d=>d.location)), "All Locations");
-return;
-}
-
-let filteredLocations=unique(
-rawData.filter(d=>d.store==selectedStore)
-.map(d=>d.location)
+return data.filter(d =>
+(!filters.store || d.store === filters.store) &&
+(!filters.location || d.location === filters.location) &&
+(!filters.year || d.year === filters.year) &&
+(!filters.product || d.product === filters.product) &&
+(!filters.category || d.category === filters.category)
 );
 
-populate("location", filteredLocations, "All Locations");
 }
 
-function getFilteredData(){
+function handleChange(){
 
-return rawData.filter(d=>{
-return (!store.value || d.store==store.value)
-&& (!location.value || d.location==location.value)
-&& (!year.value || d.year==year.value)
-&& (!product.value || d.product==product.value)
-&& (!category.value || d.category==category.value);
-});
+let filters = getFilterValues();
+let filtered = filterData(rawData, filters);
+
+updateDropdowns(filtered);
+render();
+
+}
+
+function updateDropdowns(data){
+
+populateSelect("store", unique(data.map(d=>d.store)), "All Stores");
+populateSelect("location", unique(data.map(d=>d.location)), "All Locations");
+populateSelect("year", unique(data.map(d=>d.year)), "All Years");
+populateSelect("product", unique(data.map(d=>d.product)), "All Products");
+populateSelect("category", unique(data.map(d=>d.category)), "All Categories");
+populateSelect("month", unique(data.map(d=>d.month)), "", true);
+
 }
 
 function render(){
 
-let data=getFilteredData();
-let selectedMonths=[...month.selectedOptions].map(o=>o.value).filter(v=>v);
+let filters = getFilterValues();
+let data = filterData(rawData, filters);
 
-displayMatrix(data, selectedMonths);
+displayMatrix(data, filters.months);
+
 }
 
 function displayMatrix(data, selectedMonths){
 
-let years=unique(data.map(d=>d.year)).sort();
+let years = unique(data.map(d=>d.year)).sort();
 
 if(years.length===0){
 output.innerHTML="No Data Found";
@@ -217,6 +239,7 @@ html+=row;
 
 html+="</table>";
 output.innerHTML=html;
+
 }
 
 </script>
