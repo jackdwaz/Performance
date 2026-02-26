@@ -11,9 +11,7 @@ body{
     margin:20px;
 }
 
-h2{
-    margin-bottom:20px;
-}
+h2{ margin-bottom:20px; }
 
 .filters{
     background:white;
@@ -65,6 +63,10 @@ th{
 <select id="month" multiple size="4"></select>
 <select id="category"></select>
 <select id="product"></select>
+
+<label style="margin-left:10px;">
+<input type="checkbox" id="quarterToggle"> Quarter View
+</label>
 </div>
 
 <div id="output"></div>
@@ -76,6 +78,13 @@ const URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?`;
 
 let rawData=[];
 const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const quarters={
+Q1:["Jan","Feb","Mar"],
+Q2:["Apr","May","Jun"],
+Q3:["Jul","Aug","Sep"],
+Q4:["Oct","Nov","Dec"]
+};
 
 fetch(URL)
 .then(res=>res.text())
@@ -135,7 +144,7 @@ function initFilters(){
     populate("product", unique(rawData.map(d=>d.product)), "All Products");
     populate("month", unique(rawData.map(d=>d.month)), "", true);
 
-    document.querySelectorAll("select").forEach(s=>{
+    document.querySelectorAll("select,input").forEach(s=>{
         s.addEventListener("change", render);
     });
 
@@ -158,11 +167,12 @@ function render(){
 
     let data=getFilteredData();
     let selectedMonths=[...month.selectedOptions].map(o=>o.value).filter(v=>v);
+    let showQuarter=document.getElementById("quarterToggle").checked;
 
-    displayMatrix(data, selectedMonths);
+    displayMatrix(data, selectedMonths, showQuarter);
 }
 
-function displayMatrix(data, selectedMonths){
+function displayMatrix(data, selectedMonths, showQuarter){
 
     let years = unique(data.map(d=>d.year)).sort();
 
@@ -171,7 +181,7 @@ function displayMatrix(data, selectedMonths){
         return;
     }
 
-    let html="<table><tr><th>Month</th>";
+    let html="<table><tr><th>"+(showQuarter?"Quarter":"Month")+"</th>";
 
     years.forEach(y=>{
         let total=sum(data.filter(d=>d.year==y));
@@ -180,15 +190,28 @@ function displayMatrix(data, selectedMonths){
 
     html+="</tr>";
 
-    let months = selectedMonths.length>0 ? selectedMonths : monthOrder;
+    let periods;
 
-    months.forEach(m=>{
+    if(showQuarter){
+        periods=Object.keys(quarters);
+    } else {
+        periods=selectedMonths.length>0 ? selectedMonths : monthOrder;
+    }
 
-        let row=`<tr><td><b>${m}</b></td>`;
+    periods.forEach(p=>{
+
+        let row=`<tr><td><b>${p}</b></td>`;
         let prevVal=null;
 
         years.forEach(y=>{
-            let val=sum(data.filter(d=>d.year==y && d.month==m));
+
+            let val=0;
+
+            if(showQuarter){
+                val=sum(data.filter(d=>d.year==y && quarters[p].includes(d.month)));
+            } else {
+                val=sum(data.filter(d=>d.year==y && d.month==p));
+            }
 
             let growthHTML="";
             if(prevVal!==null && prevVal>0){
