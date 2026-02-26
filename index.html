@@ -2,22 +2,24 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Sellout Performance Dashboard</title>
+<title>Sales Matrix Dashboard</title>
 
 <style>
 body{
-    font-family:'Segoe UI',sans-serif;
+    font-family:Segoe UI, sans-serif;
     background:#f4f6f9;
     margin:20px;
 }
 
-h2{margin-bottom:20px;}
+h2{
+    margin-bottom:20px;
+}
 
 .filters{
     background:white;
     padding:15px;
-    border-radius:12px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    border-radius:10px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
     margin-bottom:20px;
 }
 
@@ -32,10 +34,10 @@ table{
     width:100%;
     border-collapse:collapse;
     background:white;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
 }
 
-th,td{
+th, td{
     padding:8px;
     text-align:center;
     border:1px solid #eee;
@@ -53,15 +55,16 @@ th{
 
 <body>
 
-<h2>📊 Sellout Performance Dashboard</h2>
+<h2>📊 Sales Matrix Dashboard</h2>
 
 <div class="filters">
 <select id="store"></select>
 <select id="location"></select>
+<select id="outlet"></select>
 <select id="year"></select>
 <select id="month" multiple size="4"></select>
-<select id="product"></select>
 <select id="category"></select>
+<select id="product"></select>
 </div>
 
 <div id="output"></div>
@@ -77,139 +80,134 @@ const monthOrder=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","N
 fetch(URL)
 .then(res=>res.text())
 .then(rep=>{
-const json=JSON.parse(rep.substring(47).slice(0,-2));
-const rows=json.table.rows;
+    const json=JSON.parse(rep.substring(47).slice(0,-2));
+    const rows=json.table.rows;
 
-rawData=rows.map(r=>({
+    rawData=rows.map(r=>({
 
-store:clean(r.c[0]?.v),
-location:clean(r.c[1]?.v),
-year:clean(r.c[2]?.v),
-month:clean(r.c[3]?.v),
-category:clean(r.c[4]?.v),
-product:clean(r.c[5]?.v),
-qty:Number(r.c[6]?.v)||0
+        store:clean(r.c[0]?.v),
+        location:clean(r.c[1]?.v),
+        outlet:clean(r.c[2]?.v),
+        year:clean(r.c[3]?.v),
+        month:clean(r.c[4]?.v),
+        category:clean(r.c[5]?.v),
+        product:clean(r.c[6]?.v),
+        qty:Number(r.c[7]?.v)||0
 
-})).filter(r=>r.store && r.qty>0);
+    })).filter(r=>r.store && r.qty>0);
 
-initFilters();
+    initFilters();
 });
 
 function clean(val){
-return String(val||"")
-.replace(/\u00A0/g,"")
-.trim();
+    return String(val||"")
+        .replace(/[\u00A0\u2007\u202F]/g,"")
+        .trim();
 }
 
 function unique(arr){ return [...new Set(arr)]; }
 function sum(arr){ return arr.reduce((a,b)=>a+b.qty,0); }
 
 function populate(id, values, label, isMonth=false){
-let sel=document.getElementById(id);
-sel.innerHTML=`<option value="">${label}</option>`;
+    let sel=document.getElementById(id);
+    sel.innerHTML=`<option value="">${label}</option>`;
 
-if(isMonth){
-monthOrder.forEach(m=>{
-if(values.includes(m)){
-sel.innerHTML+=`<option value="${m}">${m}</option>`;
-}
-});
-}else{
-values.sort().forEach(v=>{
-if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
-});
-}
+    if(isMonth){
+        monthOrder.forEach(m=>{
+            if(values.includes(m)){
+                sel.innerHTML+=`<option value="${m}">${m}</option>`;
+            }
+        });
+    } else {
+        values.sort().forEach(v=>{
+            if(v) sel.innerHTML+=`<option value="${v}">${v}</option>`;
+        });
+    }
 }
 
 function initFilters(){
 
-populate("store", unique(rawData.map(d=>d.store)), "All Stores");
-populate("location", unique(rawData.map(d=>d.location)), "All Locations");
-populate("year", unique(rawData.map(d=>d.year)), "All Years");
-populate("product", unique(rawData.map(d=>d.product)), "All Products");
-populate("category", unique(rawData.map(d=>d.category)), "All Categories");
-populate("month", unique(rawData.map(d=>d.month)), "", true);
+    populate("store", unique(rawData.map(d=>d.store)), "All Stores");
+    populate("location", unique(rawData.map(d=>d.location)), "All Locations");
+    populate("outlet", unique(rawData.map(d=>d.outlet)), "All Outlets");
+    populate("year", unique(rawData.map(d=>d.year)), "All Years");
+    populate("category", unique(rawData.map(d=>d.category)), "All Categories");
+    populate("product", unique(rawData.map(d=>d.product)), "All Products");
+    populate("month", unique(rawData.map(d=>d.month)), "", true);
 
-document.querySelectorAll("select").forEach(s=>{
-s.addEventListener("change", render);
-});
+    document.querySelectorAll("select").forEach(s=>{
+        s.addEventListener("change", render);
+    });
 
-render();
+    render();
 }
 
 function getFilteredData(){
 
-let fStore=clean(store.value);
-let fLocation=clean(location.value);
-let fYear=clean(year.value);
-let fProduct=clean(product.value);
-let fCategory=clean(category.value);
-
-return rawData.filter(d =>
-(!fStore || d.store === fStore) &&
-(!fLocation || d.location === fLocation) &&
-(!fYear || d.year === fYear) &&
-(!fProduct || d.product === fProduct) &&
-(!fCategory || d.category === fCategory)
-);
-
+    return rawData.filter(d =>
+        (!store.value || d.store === store.value) &&
+        (!location.value || d.location === location.value) &&
+        (!outlet.value || d.outlet === outlet.value) &&
+        (!year.value || d.year === year.value) &&
+        (!category.value || d.category === category.value) &&
+        (!product.value || d.product === product.value)
+    );
 }
 
 function render(){
 
-let data=getFilteredData();
-let selectedMonths=[...month.selectedOptions].map(o=>clean(o.value)).filter(v=>v);
+    let data=getFilteredData();
+    let selectedMonths=[...month.selectedOptions].map(o=>o.value).filter(v=>v);
 
-displayMatrix(data, selectedMonths);
+    displayMatrix(data, selectedMonths);
 }
 
 function displayMatrix(data, selectedMonths){
 
-let years = unique(data.map(d=>d.year)).sort();
+    let years = unique(data.map(d=>d.year)).sort();
 
-if(years.length===0){
-output.innerHTML="<b>No Data Found</b>";
-return;
-}
+    if(years.length===0){
+        output.innerHTML="<b>No Data Found</b>";
+        return;
+    }
 
-let html="<table><tr><th>Month</th>";
+    let html="<table><tr><th>Month</th>";
 
-years.forEach(y=>{
-let total=sum(data.filter(d=>d.year==y));
-html+=`<th>${y}<br><small>Total: ${total}</small></th>`;
-});
+    years.forEach(y=>{
+        let total=sum(data.filter(d=>d.year==y));
+        html+=`<th>${y}<br><small>Total: ${total}</small></th>`;
+    });
 
-html+="</tr>";
+    html+="</tr>";
 
-let months = selectedMonths.length>0 ? selectedMonths : monthOrder;
+    let months = selectedMonths.length>0 ? selectedMonths : monthOrder;
 
-months.forEach(m=>{
+    months.forEach(m=>{
 
-let row=`<tr><td><b>${m}</b></td>`;
-let prevVal=null;
+        let row=`<tr><td><b>${m}</b></td>`;
+        let prevVal=null;
 
-years.forEach(y=>{
-let val=sum(data.filter(d=>d.year==y && d.month==m));
+        years.forEach(y=>{
+            let val=sum(data.filter(d=>d.year==y && d.month==m));
 
-let growthHTML="";
-if(prevVal!==null && prevVal>0){
-let g=((val-prevVal)/prevVal*100).toFixed(1);
-let cls=g>=0?"growth-pos":"growth-neg";
-growthHTML=`<div class="${cls}">${g}%</div>`;
-}
+            let growthHTML="";
+            if(prevVal!==null && prevVal>0){
+                let g=((val-prevVal)/prevVal*100).toFixed(1);
+                let cls=g>=0?"growth-pos":"growth-neg";
+                growthHTML=`<div class="${cls}">${g}%</div>`;
+            }
 
-row+=`<td>${val}${growthHTML}</td>`;
-prevVal=val;
-});
+            row+=`<td>${val}${growthHTML}</td>`;
+            prevVal=val;
+        });
 
-row+="</tr>";
-html+=row;
+        row+="</tr>";
+        html+=row;
 
-});
+    });
 
-html+="</table>";
-output.innerHTML=html;
-
+    html+="</table>";
+    output.innerHTML=html;
 }
 
 </script>
